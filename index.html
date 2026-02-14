@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASL Intelligence Engine v7.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --neon-cyan: #00ffc8;
+            --neon-purple: #a084ff;
+            --neon-pink: #ff6b9d;
+            --dark-bg: #0a0a0f;
+            --panel-bg: rgba(20, 20, 40, 0.9);
+            --glass-border: rgba(0, 255, 200, 0.3);
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, var(--dark-bg) 0%, #1a1a2e 100%);
+            color: #fff;
+            overflow: hidden;
+        }
+
+        /* Mode Toggle */
+        .mode-toggle {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--neon-cyan);
+            border-radius: 50px;
+            padding: 5px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .mode-btn {
+            padding: 12px 30px;
+            border: none;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+            color: #fff;
+            box-shadow: 0 0 20px rgba(0, 255, 200, 0.5);
+        }
+
+        /* Training Panel */
+        #training-panel {
+            position: absolute;
+            top: 90px;
+            left: 20px;
+            width: 380px;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+            z-index: 100;
+            background: var(--panel-bg);
+            backdrop-filter: blur(15px);
+            border: 2px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            display: none;
+        }
+
+        #training-panel.active { display: block; }
+
+        .panel-header {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--neon-cyan);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--neon-pink);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        .input-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        input[type="text"], select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0, 255, 200, 0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
+            color: #fff;
+            box-shadow: 0 5px 20px rgba(0, 255, 200, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 255, 200, 0.5);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b9d, #ff4757);
+            color: #fff;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--neon-cyan);
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sample-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .sample-item {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .sample-item:hover {
+            background: rgba(0, 0, 0, 0.6);
+            border-color: var(--neon-cyan);
+        }
+
+        .sample-letter {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--neon-purple);
+        }
+
+        .sample-delete {
+            background: rgba(255, 107, 157, 0.2);
+            border: none;
+            color: #ff6b9d;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .sample-delete:hover {
+            background: rgba(255, 107, 157, 0.4);
+        }
+
+        /* Recognition Panel */
+        #recognition-panel {
+            position: absolute;
+            top: 90px;
+            left: 20px;
+            width: 380px;
+            z-index: 100;
+            background: var(--panel-bg);
+            backdrop-filter: blur(15px);
+            border: 2px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        #recognition-panel.hidden { display: none; }
+
+        .confidence-display {
+            margin-top: 20px;
+        }
+
+        .confidence-bar-wrapper {
+            background: rgba(0, 0, 0, 0.4);
+            height: 40px;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 10px;
+        }
+
+        .confidence-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .distance-metrics {
+            margin-top: 15px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Main HUD */
+        #hud {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .status-text {
+            font-size: 14px;
+            letter-spacing: 5px;
+            color: var(--neon-purple);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            opacity: 0.8;
+        }
+
+        .detected-letter {
+            font-size: 280px;
+            font-weight: 900;
+            line-height: 1;
+            background: linear-gradient(180deg, #fff 0%, var(--neon-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
+            filter: drop-shadow(0 0 60px rgba(0, 255, 200, 0.6));
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .detected-letter.confident {
+            filter: drop-shadow(0 0 80px rgba(160, 132, 255, 0.8));
+            transform: scale(1.05);
+        }
+
+        .similarity-score {
+            margin-top: 20px;
+            font-size: 18px;
+            color: rgba(255, 255, 255, 0.7);
+            letter-spacing: 2px;
+        }
+
+        /* Video Feed */
+        #video-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            height: 300px;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 3px solid var(--neon-cyan);
+            box-shadow: 0 0 40px rgba(0, 255, 200, 0.4);
+            z-index: 100;
+            background: #000;
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #overlay-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #pip-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .recording-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 0, 0, 0.8);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .recording-indicator.active {
+            display: flex;
+        }
+
+        .rec-dot {
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Keyboard Shortcuts */
+        .shortcuts {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.6), rgba(20, 20, 40, 0.9));
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(160, 132, 255, 0.35);
+            border-radius: 14px;
+            padding: 14px 16px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 150;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+            min-width: 220px;
+        }
+
+        .shortcut-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .shortcut-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .key {
+            background: rgba(0, 255, 200, 0.12);
+            border: 1px solid rgba(0, 255, 200, 0.4);
+            color: #c8fff5;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--neon-cyan);
+            border-radius: 10px;
+        }
+
+        /* Loading */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--dark-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 255, 200, 0.2);
+            border-top-color: var(--neon-cyan);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 20px;
+            font-size: 16px;
+            color: var(--neon-cyan);
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">INITIALIZING NEURAL ENGINE...</div>
+    </div>
+
+    <div class="mode-toggle">
+        <button class="mode-btn active" onclick="switchMode('recognition')">RECOGNITION</button>
+        <button class="mode-btn" onclick="switchMode('training')">TRAINING</button>
+    </div>
+
+    <!-- Training Panel -->
+    <div id="training-panel">
+        <div class="panel-header">
+            <div class="pulse-dot"></div>
+            TRAINING MODE
+        </div>
+
+        <div class="input-group">
+            <label class="input-label">Target Letter</label>
+            <input type="text" id="targetLetter" placeholder="Enter A-Z" maxlength="1" 
+                   style="text-align: center; font-size: 32px; font-weight: 700;">
+        </div>
+
+        <div class="input-group">
+            <label class="input-label">Samples per Letter</label>
+            <select id="sampleMode">
+                <option value="1">1 Sample (Quick)</option>
+                <option value="3" selected>3 Samples (Recommended)</option>
+                <option value="5">5 Samples (Accurate)</option>
+                <option value="10">10 Samples (Maximum)</option>
+            </select>
+        </div>
+
+        <button class="btn btn-primary" onclick="captureTrainingSample()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+            CAPTURE POSE (SPACE)
+        </button>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalSamples">0</div>
+                <div class="stat-label">Total Samples</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="uniqueLetters">0</div>
+                <div class="stat-label">Letters Trained</div>
+            </div>
+        </div>
+
+        <div class="sample-list" id="sampleList">
+            <!-- Samples will be added here -->
+        </div>
+
+        <button class="btn btn-secondary" onclick="exportModel()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <polyline points="17 21 17 13 7 13 7 21"/>
+                <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            EXPORT MODEL
+        </button>
+
+        <button class="btn btn-secondary" onclick="importModel()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            IMPORT MODEL
+        </button>
+
+        <button class="btn btn-danger" onclick="clearAllData()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            CLEAR ALL DATA
+        </button>
+
+        <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="handleFileImport(event)">
+    </div>
+
+    <!-- Recognition Panel -->
+    <div id="recognition-panel">
+        <div class="panel-header">
+            <div class="pulse-dot" style="background: var(--neon-cyan);"></div>
+            CLASSIFICATION ENGINE
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="modelSize">0</div>
+                <div class="stat-label">Model Samples</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="accuracyDisplay">0%</div>
+                <div class="stat-label">Confidence</div>
+            </div>
+        </div>
+
+        <div class="confidence-display">
+            <label class="input-label">Match Confidence</label>
+            <div class="confidence-bar-wrapper">
+                <div class="confidence-bar" id="confidenceBar" style="width: 0%;">
+                    <span id="confidenceText">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="distance-metrics" id="distanceMetrics">
+            <div class="metric-row">
+                <span>Best Match Distance:</span>
+                <span id="bestDistance">—</span>
+            </div>
+            <div class="metric-row">
+                <span>Threshold:</span>
+                <span id="thresholdDisplay">1.5</span>
+            </div>
+            <div class="metric-row">
+                <span>Algorithm:</span>
+                <span>k-NN (k=3)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Display -->
+    <div id="hud">
+        <p class="status-text" id="statusText">AI CLASSIFIER ACTIVE</p>
+        <h1 id="detectedLetter" class="detected-letter">—</h1>
+        <p class="similarity-score" id="similarityScore"></p>
+    </div>
+
+    <!-- Video Feed -->
+    <div id="video-container">
+        <div class="recording-indicator" id="recordingIndicator">
+            <div class="rec-dot"></div>
+            <span>CAPTURING</span>
+        </div>
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="pip-canvas"></canvas>
+        <canvas id="overlay-canvas"></canvas>
+    </div>
+
+    <!-- Keyboard Shortcuts -->
+    <div class="shortcuts">
+        <div class="shortcut-row">
+            <span class="key">SPACE</span>
+            <span>Capture Training Sample</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="key">TAB</span>
+            <span>Switch Mode</span>
+        </div>
+        <div class="shortcut-row">
+            <span class="key">ESC</span>
+            <span>Clear Detection</span>
+        </div>
+    </div>
+
+    <script>
+        // ============= GLOBAL STATE =============
+        let dataset = [];
+        let currentLandmarks = null;
+        let currentMode = 'recognition';
+        let isCapturing = false;
+        const STORAGE_KEY = 'satoru_asl_model';
+        const DISTANCE_THRESHOLD = 1.5;
+        const K_NEIGHBORS = 3;
+
+        // ============= DATA PERSISTENCE =============
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataset));
+            updateStats();
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                dataset = JSON.parse(saved);
+                updateStats();
+                renderSampleList();
+            }
+        }
+
+        // ============= ADVANCED k-NN CLASSIFIER =============
+        function normalizePoints(points) {
+            const base = points[0];
+            return points.map(p => ({
+                x: p.x - base.x,
+                y: p.y - base.y,
+                z: p.z - base.z
+            }));
+        }
+
+        function calculateDistance(points1, points2) {
+            let totalDist = 0;
+            for (let i = 0; i < 21; i++) {
+                const d = Math.sqrt(
+                    Math.pow(points1[i].x - points2[i].x, 2) +
+                    Math.pow(points1[i].y - points2[i].y, 2) +
+                    Math.pow(points1[i].z - points2[i].z, 2)
+                );
+                totalDist += d;
+            }
+            return totalDist;
+        }
+
+        function classifyPoseAdvanced(livePoints) {
+            if (dataset.length === 0) {
+                return { letter: '—', confidence: 0, distance: 0 };
+            }
+
+            const normLive = normalizePoints(livePoints);
+            const distances = [];
+
+            // Calculate distances to all samples
+            dataset.forEach(sample => {
+                const dist = calculateDistance(normLive, sample.points);
+                distances.push({ label: sample.label, distance: dist });
+            });
+
+            // Sort by distance
+            distances.sort((a, b) => a.distance - b.distance);
+
+            // Take k nearest neighbors
+            const neighbors = distances.slice(0, Math.min(K_NEIGHBORS, distances.length));
+            
+            // Vote by label
+            const votes = {};
+            let totalWeight = 0;
+            
+            neighbors.forEach(neighbor => {
+                const weight = 1 / (neighbor.distance + 0.0001); // Avoid division by zero
+                votes[neighbor.label] = (votes[neighbor.label] || 0) + weight;
+                totalWeight += weight;
+            });
+
+            // Find winner
+            let bestLabel = '—';
+            let bestScore = 0;
+            
+            for (const [label, score] of Object.entries(votes)) {
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestLabel = label;
+                }
+            }
+
+            const bestDistance = distances[0].distance;
+            const confidence = bestDistance < DISTANCE_THRESHOLD ? 
+                Math.max(0, Math.min(1, 1 - (bestDistance / DISTANCE_THRESHOLD))) : 0;
+
+            if (bestDistance > DISTANCE_THRESHOLD) {
+                return { letter: '—', confidence: 0, distance: bestDistance };
+            }
+
+            return { 
+                letter: bestLabel, 
+                confidence: confidence,
+                distance: bestDistance 
+            };
+        }
+
+        // ============= TRAINING FUNCTIONS =============
+        function captureTrainingSample() {
+            const label = document.getElementById('targetLetter').value.trim().toUpperCase();
+            
+            if (!label || label.length !== 1) {
+                alert('⚠ Please enter a single letter (A-Z)');
+                return;
+            }
+
+            if (!currentLandmarks) {
+                alert('⚠ No hand detected! Please position your hand in frame.');
+                return;
+            }
+
+            // Show recording indicator
+            const indicator = document.getElementById('recordingIndicator');
+            indicator.classList.add('active');
+
+            setTimeout(() => {
+                const normalized = normalizePoints(currentLandmarks);
+                dataset.push({ 
+                    label, 
+                    points: normalized,
+                    timestamp: new Date().toISOString()
+                });
+
+                saveToLocalStorage();
+                renderSampleList();
+                
+                // Audio feedback
+                playCaptureTone();
+                
+                indicator.classList.remove('active');
+
+                // Check if we should auto-advance
+                const sampleMode = parseInt(document.getElementById('sampleMode').value);
+                const sampleCount = dataset.filter(s => s.label === label).length;
+                
+                if (sampleCount >= sampleMode) {
+                    // Suggest next letter
+                    const nextLetter = String.fromCharCode(label.charCodeAt(0) + 1);
+                    if (nextLetter <= 'Z') {
+                        document.getElementById('targetLetter').value = nextLetter;
+                    }
+                }
+            }, 100);
+        }
+
+        function deleteSample(index) {
+            if (confirm('Delete this training sample?')) {
+                dataset.splice(index, 1);
+                saveToLocalStorage();
+                renderSampleList();
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('⚠ WARNING: This will delete ALL training data. Are you sure?')) {
+                dataset = [];
+                localStorage.removeItem(STORAGE_KEY);
+                updateStats();
+                renderSampleList();
+            }
+        }
+
+        function renderSampleList() {
+            const listEl = document.getElementById('sampleList');
+            
+            if (dataset.length === 0) {
+                listEl.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.5;">No training samples yet</div>';
+                return;
+            }
+
+            // Group by letter
+            const grouped = {};
+            dataset.forEach((sample, index) => {
+                if (!grouped[sample.label]) {
+                    grouped[sample.label] = [];
+                }
+                grouped[sample.label].push({ ...sample, index });
+            });
+
+            let html = '';
+            Object.keys(grouped).sort().forEach(letter => {
+                const samples = grouped[letter];
+                html += `
+                    <div class="sample-item">
+                        <div>
+                            <span class="sample-letter">${letter}</span>
+                            <span style="margin-left: 10px; opacity: 0.6; font-size: 12px;">
+                                ${samples.length} sample${samples.length > 1 ? 's' : ''}
+                            </span>
+                        </div>
+                        <button class="sample-delete" onclick="deleteLetterSamples('${letter}')">
+                            Delete All
+                        </button>
+                    </div>
+                `;
+            });
+
+            listEl.innerHTML = html;
+        }
+
+        function deleteLetterSamples(letter) {
+            if (confirm(`Delete all samples for letter "${letter}"?`)) {
+                dataset = dataset.filter(s => s.label !== letter);
+                saveToLocalStorage();
+                renderSampleList();
+            }
+        }
+
+        // ============= MODEL IMPORT/EXPORT =============
+        function exportModel() {
+            const modelData = {
+                version: '7.0',
+                dataset: dataset,
+                metadata: {
+                    totalSamples: dataset.length,
+                    uniqueLetters: new Set(dataset.map(s => s.label)).size,
+                    exportDate: new Date().toISOString()
+                }
+            };
+
+            const dataStr = JSON.stringify(modelData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `satoru_asl_model_${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importModel() {
+            document.getElementById('fileInput').click();
+        }
+
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const modelData = JSON.parse(e.target.result);
+                    
+                    if (modelData.dataset && Array.isArray(modelData.dataset)) {
+                        const merge = confirm('Merge with existing data? (Cancel to replace)');
+                        
+                        if (merge) {
+                            dataset = [...dataset, ...modelData.dataset];
+                        } else {
+                            dataset = modelData.dataset;
+                        }
+                        
+                        saveToLocalStorage();
+                        renderSampleList();
+                        alert(`✓ Imported ${modelData.dataset.length} samples!`);
+                    } else {
+                        alert('✗ Invalid model file format');
+                    }
+                } catch (error) {
+                    alert('✗ Error reading file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ============= UI UPDATES =============
+        function updateStats() {
+            document.getElementById('totalSamples').textContent = dataset.length;
+            document.getElementById('uniqueLetters').textContent = 
+                new Set(dataset.map(s => s.label)).size;
+            document.getElementById('modelSize').textContent = dataset.length;
+        }
+
+        function updateRecognitionUI(result) {
+            const letterEl = document.getElementById('detectedLetter');
+            const confidenceBar = document.getElementById('confidenceBar');
+            const confidenceText = document.getElementById('confidenceText');
+            const accuracyDisplay = document.getElementById('accuracyDisplay');
+            const bestDistance = document.getElementById('bestDistance');
+            const similarityScore = document.getElementById('similarityScore');
+
+            letterEl.textContent = result.letter;
+            
+            const confidencePercent = Math.round(result.confidence * 100);
+            confidenceBar.style.width = `${confidencePercent}%`;
+            confidenceText.textContent = `${confidencePercent}%`;
+            accuracyDisplay.textContent = `${confidencePercent}%`;
+            bestDistance.textContent = result.distance.toFixed(3);
+
+            if (result.letter !== '—' && result.confidence > 0.7) {
+                letterEl.classList.add('confident');
+                similarityScore.textContent = `Match Quality: ${confidencePercent}%`;
+            } else {
+                letterEl.classList.remove('confident');
+                similarityScore.textContent = '';
+            }
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            
+            // Update buttons
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update panels
+            if (mode === 'training') {
+                document.getElementById('training-panel').classList.add('active');
+                document.getElementById('recognition-panel').classList.add('hidden');
+                document.getElementById('statusText').textContent = 'TRAINING MODE ACTIVE';
+            } else {
+                document.getElementById('training-panel').classList.remove('active');
+                document.getElementById('recognition-panel').classList.remove('hidden');
+                document.getElementById('statusText').textContent = 'AI CLASSIFIER ACTIVE';
+            }
+        }
+
+        // ============= AUDIO FEEDBACK =============
+        function playCaptureTone() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 880;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        // ============= THREE.JS VISUALIZATION =============
+        const scene = new THREE.Scene();
+        // No fog for PiP - keep it clean
+
+        const pipCanvas = document.getElementById('pip-canvas');
+        const pipContainer = document.getElementById('video-container');
+        
+        const camera = new THREE.PerspectiveCamera(50, pipContainer.offsetWidth / pipContainer.offsetHeight, 0.1, 1000);
+        camera.position.set(0, 0, 8);
+
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: pipCanvas,
+            antialias: true, 
+            alpha: true 
+        });
+        renderer.setSize(pipContainer.offsetWidth, pipContainer.offsetHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0x000000, 0); // Transparent background
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x808080, 2);
+        scene.add(ambientLight);
+
+        const pointLight1 = new THREE.PointLight(0x00ffc8, 1.5, 15);
+        pointLight1.position.set(5, 5, 5);
+        scene.add(pointLight1);
+
+        const pointLight2 = new THREE.PointLight(0xa084ff, 1.5, 15);
+        pointLight2.position.set(-5, -5, 5);
+        scene.add(pointLight2);
+
+        // Hand skeleton
+        const handGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(21 * 3);
+        handGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const connections = [
+            [0,1],[1,2],[2,3],[3,4],           // Thumb
+            [0,5],[5,6],[6,7],[7,8],           // Index
+            [0,9],[9,10],[10,11],[11,12],      // Middle
+            [0,13],[13,14],[14,15],[15,16],    // Ring
+            [0,17],[17,18],[18,19],[19,20],    // Pinky
+            [5,9],[9,13],[13,17]               // Palm
+        ];
+
+        handGeometry.setIndex(connections.flat());
+
+        const lineMaterial = new THREE.LineBasicMaterial({ 
+            color: 0x00ffc8,
+            transparent: true,
+            opacity: 0.85,
+            linewidth: 2.5
+        });
+
+        const handLines = new THREE.LineSegments(handGeometry, lineMaterial);
+        scene.add(handLines);
+
+        // Joints
+        const jointGeometry = new THREE.SphereGeometry(0.08, 12, 12);
+        const jointMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xa084ff,
+            emissive: 0xa084ff,
+            emissiveIntensity: 0.6,
+            shininess: 80
+        });
+
+        const joints = [];
+        const smoothedPositions = []; // Store smoothed positions for interpolation
+        for (let i = 0; i < 21; i++) {
+            const joint = new THREE.Mesh(jointGeometry, jointMaterial.clone());
+            joints.push(joint);
+            scene.add(joint);
+            smoothedPositions.push({ x: 0, y: 0, z: 0 });
+        }
+
+        // Smoothing factor (0-1): lower = smoother but more lag, higher = more responsive
+        const SMOOTHING_FACTOR = 0.35;
+
+        // Skip particles in PiP for cleaner look
+
+        // ============= MEDIAPIPE SETUP =============
+        const videoElement = document.getElementById('webcam');
+        const overlayCanvas = document.getElementById('overlay-canvas');
+        const overlayCtx = overlayCanvas.getContext('2d');
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults((results) => {
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                currentLandmarks = results.multiHandLandmarks[0];
+
+                // Draw on overlay
+                drawHandOnCanvas(overlayCtx, currentLandmarks, overlayCanvas.width, overlayCanvas.height);
+
+                // Update 3D skeleton to match camera space with smoothing
+                const posAttr = handLines.geometry.attributes.position;
+                currentLandmarks.forEach((lm, i) => {
+                    // Map to camera coordinates (mirrored like video)
+                    const targetX = (lm.x - 0.5) * 10;
+                    const targetY = (0.5 - lm.y) * 10;
+                    const targetZ = -lm.z * 8;
+                    
+                    // Apply smoothing (linear interpolation)
+                    smoothedPositions[i].x += (targetX - smoothedPositions[i].x) * SMOOTHING_FACTOR;
+                    smoothedPositions[i].y += (targetY - smoothedPositions[i].y) * SMOOTHING_FACTOR;
+                    smoothedPositions[i].z += (targetZ - smoothedPositions[i].z) * SMOOTHING_FACTOR;
+                    
+                    posAttr.setXYZ(i, smoothedPositions[i].x, smoothedPositions[i].y, smoothedPositions[i].z);
+                    joints[i].position.set(smoothedPositions[i].x, smoothedPositions[i].y, smoothedPositions[i].z);
+                });
+                posAttr.needsUpdate = true;
+
+                // Classify in recognition mode
+                if (currentMode === 'recognition') {
+                    const result = classifyPoseAdvanced(currentLandmarks);
+                    updateRecognitionUI(result);
+                }
+            } else {
+                currentLandmarks = null;
+                if (currentMode === 'recognition') {
+                    updateRecognitionUI({ letter: '—', confidence: 0, distance: 0 });
+                }
+            }
+        });
+
+        function drawHandOnCanvas(ctx, landmarks, width, height) {
+            // Draw connections
+            ctx.strokeStyle = 'rgba(0, 255, 200, 0.8)';
+            ctx.lineWidth = 4;
+            connections.forEach(([start, end]) => {
+                ctx.beginPath();
+                ctx.moveTo(landmarks[start].x * width, landmarks[start].y * height);
+                ctx.lineTo(landmarks[end].x * width, landmarks[end].y * height);
+                ctx.stroke();
+            });
+
+            // Draw landmarks
+            landmarks.forEach((lm, i) => {
+                ctx.beginPath();
+                ctx.arc(lm.x * width, lm.y * height, i === 0 ? 10 : 6, 0, 2 * Math.PI);
+                ctx.fillStyle = i === 0 ? '#a084ff' : '#00ffc8';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+        }
+
+        // Start camera
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 1280,
+            height: 960
+        });
+
+        cameraFeed.start().then(() => {
+            overlayCanvas.width = videoElement.videoWidth;
+            overlayCanvas.height = videoElement.videoHeight;
+
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+            }, 1000);
+        });
+
+        // ============= ANIMATION LOOP =============
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Don't rotate - keep skeleton aligned with hand
+            // handLines.rotation.y += 0.004;
+            // joints.forEach(joint => joint.rotation.y += 0.004);
+
+            // Subtle light movement
+            const time = Date.now() * 0.001;
+            pointLight1.position.x = Math.sin(time * 0.3) * 3;
+            pointLight1.position.z = Math.cos(time * 0.3) * 3;
+            pointLight2.position.x = Math.cos(time * 0.2) * 3;
+            pointLight2.position.z = Math.sin(time * 0.2) * 3;
+
+            renderer.render(scene, camera);
+        }
+
+        // ============= EVENT LISTENERS =============
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && currentMode === 'training') {
+                e.preventDefault();
+                captureTrainingSample();
+            } else if (e.code === 'Tab') {
+                e.preventDefault();
+                switchMode(currentMode === 'training' ? 'recognition' : 'training');
+            } else if (e.code === 'Escape') {
+                updateRecognitionUI({ letter: '—', confidence: 0, distance: 0 });
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('video-container');
+            camera.aspect = container.offsetWidth / container.offsetHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.offsetWidth, container.offsetHeight);
+        });
+
+        // ============= INITIALIZATION =============
+        loadFromLocalStorage();
+        animate();
+    </script>
+</body>
+</html>
