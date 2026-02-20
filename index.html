@@ -558,8 +558,9 @@
         <div class="input-group">
             <label class="input-label">Samples per Letter</label>
             <select id="sampleMode">
+                <option value="unlimited" selected>Unlimited (Best Training)</option>
                 <option value="1">1 Sample (Quick)</option>
-                <option value="3" selected>3 Samples (Recommended)</option>
+                <option value="3">3 Samples</option>
                 <option value="5">5 Samples (Accurate)</option>
                 <option value="10">10 Samples (Maximum)</option>
             </select>
@@ -831,10 +832,11 @@
                 indicator.classList.remove('active');
 
                 // Check if we should auto-advance
-                const sampleMode = parseInt(document.getElementById('sampleMode').value);
+                const sampleModeValue = document.getElementById('sampleMode').value;
+                const sampleMode = Number.parseInt(sampleModeValue, 10);
                 const sampleCount = dataset.filter(s => s.label === label).length;
                 
-                if (sampleCount >= sampleMode) {
+                if (Number.isFinite(sampleMode) && sampleCount >= sampleMode) {
                     // Suggest next letter
                     const nextLetter = String.fromCharCode(label.charCodeAt(0) + 1);
                     if (nextLetter <= 'Z') {
