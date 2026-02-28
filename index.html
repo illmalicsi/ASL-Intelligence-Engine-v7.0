@@ -261,6 +261,74 @@
             background: rgba(255, 107, 157, 0.4);
         }
 
+        .sample-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .sample-view {
+            background: rgba(0, 255, 200, 0.15);
+            border: none;
+            color: var(--neon-cyan);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .sample-view:hover {
+            background: rgba(0, 255, 200, 0.3);
+        }
+
+        .sample-preview-panel {
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            display: none;
+        }
+
+        .sample-preview-panel.active {
+            display: block;
+        }
+
+        .sample-preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 12px;
+            opacity: 0.9;
+            letter-spacing: 0.6px;
+        }
+
+        .sample-preview-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .sample-preview-controls button {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 8px;
+            padding: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .sample-preview-canvas {
+            width: 100%;
+            height: 180px;
+            border-radius: 10px;
+            background: rgba(10, 10, 15, 0.95);
+            border: 1px solid rgba(0, 255, 200, 0.2);
+        }
+
         /* Recognition Panel */
         #recognition-panel {
             position: absolute;
@@ -589,6 +657,19 @@
             <!-- Samples will be added here -->
         </div>
 
+        <div class="sample-preview-panel" id="samplePreviewPanel">
+            <div class="sample-preview-header">
+                <span id="samplePreviewTitle">SAMPLE PREVIEW</span>
+                <span id="samplePreviewCount">0 / 0</span>
+            </div>
+            <canvas id="samplePreviewCanvas" class="sample-preview-canvas" width="320" height="180"></canvas>
+            <div class="sample-preview-controls">
+                <button onclick="previewPreviousSample()">Previous</button>
+                <button onclick="previewNextSample()">Next</button>
+                <button onclick="closeSamplePreview()">Close</button>
+            </div>
+        </div>
+
         <button class="btn btn-secondary" onclick="exportModel()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -699,6 +780,9 @@
         let currentLandmarks = null;
         let currentMode = 'recognition';
         let isCapturing = false;
+        let previewSamples = [];
+        let previewSampleIndex = 0;
+        let previewLetter = '';
         const STORAGE_KEY = 'satoru_asl_model';
         const DISTANCE_THRESHOLD = 1.5;
         const K_NEIGHBORS = 3;
@@ -868,16 +952,18 @@
             
             if (dataset.length === 0) {
                 listEl.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.5;">No training samples yet</div>';
+                closeSamplePreview();
                 return;
             }
 
             // Group by letter
             const grouped = {};
             dataset.forEach((sample, index) => {
-                if (!grouped[sample.label]) {
-                    grouped[sample.label] = [];
+                const label = String(sample.label ?? 'UNLABELED').toUpperCase();
+                if (!grouped[label]) {
+                    grouped[label] = [];
                 }
-                grouped[sample.label].push({ ...sample, index });
+                grouped[label].push({ ...sample, index });
             });
 
             let html = '';
@@ -891,9 +977,10 @@
                                 ${samples.length} sample${samples.length > 1 ? 's' : ''}
                             </span>
                         </div>
-                        <button class="sample-delete" onclick="deleteLetterSamples('${letter}')">
-                            Delete All
-                        </button>
+                        <div class="sample-actions">
+                            <button class="sample-view" onclick="openLetterPreview('${letter}')">View</button>
+                            <button class="sample-delete" onclick="deleteLetterSamples('${letter}')">Delete All</button>
+                        </div>
                     </div>
                 `;
             });
@@ -901,11 +988,156 @@
             listEl.innerHTML = html;
         }
 
+        function openLetterPreview(letter) {
+            previewSamples = dataset.filter(sample => String(sample.label ?? '').toUpperCase() === letter);
+            previewSampleIndex = 0;
+            previewLetter = letter;
+
+            if (previewSamples.length === 0) {
+                closeSamplePreview();
+                return;
+            }
+
+            const panel = document.getElementById('samplePreviewPanel');
+            panel.classList.add('active');
+            renderSamplePreview();
+        }
+
+        function closeSamplePreview() {
+            previewSamples = [];
+            previewSampleIndex = 0;
+            previewLetter = '';
+            document.getElementById('samplePreviewPanel').classList.remove('active');
+        }
+
+        function previewNextSample() {
+            if (previewSamples.length === 0) return;
+            previewSampleIndex = (previewSampleIndex + 1) % previewSamples.length;
+            renderSamplePreview();
+        }
+
+        function previewPreviousSample() {
+            if (previewSamples.length === 0) return;
+            previewSampleIndex = (previewSampleIndex - 1 + previewSamples.length) % previewSamples.length;
+            renderSamplePreview();
+        }
+
+        function renderSamplePreview() {
+            if (previewSamples.length === 0) return;
+
+            const sample = previewSamples[previewSampleIndex];
+            const points = normalizePreviewPoints(getSamplePoints(sample));
+            const canvas = document.getElementById('samplePreviewCanvas');
+            const ctx = canvas.getContext('2d');
+
+            document.getElementById('samplePreviewTitle').textContent = `SAMPLE PREVIEW — LETTER ${previewLetter}`;
+            document.getElementById('samplePreviewCount').textContent = `${previewSampleIndex + 1} / ${previewSamples.length}`;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!points) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.font = '14px Inter, sans-serif';
+                ctx.fillText('Invalid sample format', 16, 30);
+                return;
+            }
+
+            const projected = projectPreviewPoints(points, canvas.width, canvas.height);
+
+            ctx.strokeStyle = 'rgba(0, 255, 200, 0.9)';
+            ctx.lineWidth = 2;
+            connections.forEach(([start, end]) => {
+                ctx.beginPath();
+                ctx.moveTo(projected[start].x, projected[start].y);
+                ctx.lineTo(projected[end].x, projected[end].y);
+                ctx.stroke();
+            });
+
+            projected.forEach((point, index) => {
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, index === 0 ? 4 : 3, 0, Math.PI * 2);
+                ctx.fillStyle = index === 0 ? '#a084ff' : '#00ffc8';
+                ctx.fill();
+            });
+        }
+
+        function getSamplePoints(sample) {
+            if (!sample || typeof sample !== 'object') {
+                return null;
+            }
+
+            if (Array.isArray(sample.points)) {
+                return sample.points;
+            }
+
+            if (Array.isArray(sample.landmarks)) {
+                return sample.landmarks;
+            }
+
+            if (Array.isArray(sample.keypoints)) {
+                return sample.keypoints;
+            }
+
+            if (Array.isArray(sample.features)) {
+                return sample.features;
+            }
+
+            return null;
+        }
+
+        function normalizePreviewPoints(points) {
+            if (!Array.isArray(points)) return null;
+
+            if (points.length === 21 && typeof points[0] === 'object') {
+                return points.map(point => ({
+                    x: Number(point.x) || 0,
+                    y: Number(point.y) || 0,
+                    z: Number(point.z) || 0
+                }));
+            }
+
+            if (points.length === 63 && typeof points[0] === 'number') {
+                const parsed = [];
+                for (let i = 0; i < 63; i += 3) {
+                    parsed.push({ x: points[i], y: points[i + 1], z: points[i + 2] });
+                }
+                return parsed;
+            }
+
+            return null;
+        }
+
+        function projectPreviewPoints(points, width, height) {
+            const xValues = points.map(point => point.x);
+            const yValues = points.map(point => point.y);
+
+            const minX = Math.min(...xValues);
+            const maxX = Math.max(...xValues);
+            const minY = Math.min(...yValues);
+            const maxY = Math.max(...yValues);
+
+            const rangeX = Math.max(maxX - minX, 0.001);
+            const rangeY = Math.max(maxY - minY, 0.001);
+            const scale = Math.min((width - 30) / rangeX, (height - 30) / rangeY);
+
+            const offsetX = (width - rangeX * scale) / 2;
+            const offsetY = (height - rangeY * scale) / 2;
+
+            return points.map(point => ({
+                x: (point.x - minX) * scale + offsetX,
+                y: (point.y - minY) * scale + offsetY
+            }));
+        }
+
         function deleteLetterSamples(letter) {
             if (confirm(`Delete all samples for letter "${letter}"?`)) {
                 dataset = dataset.filter(s => s.label !== letter);
                 saveToLocalStorage();
                 renderSampleList();
+
+                if (previewLetter === letter) {
+                    closeSamplePreview();
+                }
             }
         }
 
